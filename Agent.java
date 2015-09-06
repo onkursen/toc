@@ -1,49 +1,44 @@
 import java.util.Random;
 
-public class Agent {
-	private double aspLevel;
-	private double load;
-	private double prevLoad;
-	private double loadChange = 0.01;
-	private double util;
-	private double learningRate = 0.5;
-	private boolean overThreshold = false;
+class Agent {
+  private static final double LEARNING_RATE = 0.5;
 
-	public Agent(Random generator, int numAgents) {
-		aspLevel = 0;
-		load = 2 * generator.nextDouble() / numAgents;
-	}
+  private double aspLevel;
+  private double load;
+  private double loadChange;
+  private double previousLoad;
+  private boolean overThreshold;
+  private double util;
 
-	public double getLevel() {
-		return aspLevel;
-	}
+  public Agent(Random generator, int numAgents) {
+    aspLevel = 0;
+    load = 2 * generator.nextDouble() / numAgents;
+    loadChange = 0.01;
+    overThreshold = false;
+  }
 
-	public double getLoad() {
-		return load;
-	}
+  public double getLoad() {
+    return load;
+  }
 
-	public double getUtil() {
-		return util;
-	}
+  public double getUtility() {
+    return util;
+  }
 
-	public void setUtility(double newUtil) {
-		adjust(newUtil);
-		util = newUtil;
-	}
-	
-	public void adjust(double newUtil) {
-		if (newUtil < aspLevel) {
-			load = (load + prevLoad) / 2;
-			if (!overThreshold) {
-				loadChange /= 2;
-				overThreshold = true;
-			}
-		}
-		else {
-			aspLevel = (learningRate * newUtil) + (1 - learningRate)* util;
-			prevLoad = load;
-			load += loadChange;
-			overThreshold = false;
-		}
-	}
+  public void setUtility(double newUtil) {
+    if (newUtil < aspLevel) {
+      load = (load + previousLoad) / 2;
+      if (!overThreshold) {
+        loadChange /= 2;
+        overThreshold = true;
+      }
+    }
+    else {
+      aspLevel = LEARNING_RATE * newUtil + (1 - LEARNING_RATE) * util;
+      previousLoad = load;
+      load += loadChange;
+      overThreshold = false;
+    }
+    util = newUtil;
+  }
 }

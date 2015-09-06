@@ -1,102 +1,100 @@
-import java.io.*;
-import java.util.*;
+import java.io.IOException;
 
 public class Commons {
-	private static double totalLoad;
-	private static final double maxLoad = 7.5;
-	private static final double utilityBase = 1.0;
-	private static final int populationSize = 10;
-	private static final int numRuns = 10;
-	private static final int numIterations = 200;
-	private static final double environmentalFactor = 3; // k = {0.25, 0.5, 1, 3, 5}
-	private static Agent[] agents;
-	private static double[][] load, avgUtility, utilSD, numFreeRiders;
+  // Environment settings
+  private static final double MAX_LOAD = 7.5;
+  private static final double UTILITY_BASE = 1.0;
+  private static final int POPULATION_SIZE = 10;
+  private static final double ENVIRONMENTAL_FACTOR = 3; // k = {0.25, 0.5, 1, 3, 5}
+  private static final double FREE_RIDER_FACTOR = 1.15;
 
+  // Experimental settings
+  private static final long SEED = 1234;
+  private static final int NUM_RUNS = 10;
+  private static final int NUM_ITERATIONS = 100;
+  
+  public static void main (String args []) throws IOException {
+    double[][] totalLoads = new double[NUM_RUNS][NUM_ITERATIONS];
+    double[][] utilityAverages = new double[NUM_RUNS][NUM_ITERATIONS];
+    double[][] utilityStandardDeviations = new double[NUM_RUNS][NUM_ITERATIONS];
+    double[][] numFreeRiders = new double[NUM_RUNS][NUM_ITERATIONS];
 
-	public static void main (String args []) throws IOException {
-		load = new double[numRuns][numIterations];
-		avgUtility = new double[numRuns][numIterations];
-		utilSD = new double[numRuns][numIterations];
-		numFreeRiders = new double[numRuns][numIterations];
+    for (int runs = 0; runs < NUM_RUNS; runs++) {
+      Random generator = new Random(SEED);
+      Agent[] agents = new Agent[POPULATION_SIZE];
+      for (int i = 0; i < POPULATION_SIZE; i++) {
+        agents[i] = new Agent(generator, POPULATION_SIZE);
+      }
 
-		for (int runs = 0; runs < numRuns; runs++) {
-			agents = new Agent[populationSize];
-			Random generator = new Random();
-			for (int i = 0; i < populationSize; i++)
-				agents[i] = new Agent(generator, populationSize);
+      for (int iterations = 0; iterations < NUM_ITERATIONS; iterations++) {
+        // Get total load imposed by all agents
+        double totalLoad = 0;
+        for (Agent a : agents) {
+          totalLoad += a.getLoad();
+        }
 
-			for (int iterations = 0; iterations < numIterations; iterations++) {
-				getTotalLoad();
-				returnUtility();
-				load[runs][iterations] = totalLoad;
-				avgUtility[runs][iterations] = getTotalUtility() / populationSize;
-				utilSD[runs][iterations] = utilSD();
-				numFreeRiders[runs][iterations] = numFreeRiders(); 
-			}
-		}
-		
-		PrintWriter out = new PrintWriter(new FileWriter("plottingOutput.out"));
-		for (int i = 0; i < numIterations; i++)
-			out.printf("%d %5.3f %6.4f %7.5f %6.4f %5.3f %6.4f \n",
-					i + 1, average(load, i), SD(load, i), average(avgUtility, i), SD(avgUtility, i), 
-					average(utilSD, i), SD(utilSD, i));
-		out.close();
-	}
+        // Compare against threshold to establish utility returned to agents
+        double utilityPerLoad = (totalLoad <= MAX_LOAD) ?
+          UTILITY_BASE :
+          Math.exp(-1 * ENVIRONMENTAL_FACTOR * (totalLoad - MAX_LOAD));
 
-	public static void getTotalLoad() {
-		totalLoad = 0;
-		for (Agent x : agents)
-			totalLoad += x.getLoad();
-	}
+        // Return utility to agents
+        for (Agent a : agents) {
+          a.setUtility(a.getLoad() * utilityPerLoad);
+        }
 
-	public static double getTotalUtility() {
-		return totalLoad * UtilityPerLoad();
-	}
+        // Calculate standard deviation of utility
+        double averageUtility = totalLoad * utilityPerLoad / POPULATION_SIZE;
+        double deviations = 0;
+        for (Agent a : agents) {
+          deviations += Math.pow(a.getUtility() - averageUtility, 2);
+        }
+        double utilitySD = Math.sqrt(deviations / (POPULATION_SIZE - 1));
 
-	public static void returnUtility() {
-		double utilPerLoad = UtilityPerLoad();
-		for (Agent x : agents)
-			x.setUtility(x.getLoad() * utilPerLoad);
-	}
+        // Calculate number of free riders
+        int freeRiders = 0;
+        if (totalLoad > MAX_LOAD) {
+          for (Agent a : agents) {
+            double averageLoadOfOthers = (totalLoad - a.getLoad()) /
+                                         (POPULATION_SIZE - 1); 
+            if (a.getLoad() >= FREE_RIDER_FACTOR * averageLoadOfOthers) {
+              freeRiders++;
+            }
+          }
+        }
 
-	private static double UtilityPerLoad() {
-		if (totalLoad <= maxLoad)
-			return utilityBase;
-		return Math.exp(-1 * environmentalFactor * (totalLoad - maxLoad));
-	}
-	
-	public static double utilSD() {
-		double loadAvg = getTotalUtility() / populationSize;
-		double deviations = 0;
-		for (Agent x : agents)
-			deviations += Math.pow(x.getLoad() - loadAvg,2);
-		return Math.sqrt(deviations / (populationSize - 1));
-	}
+        // Store results for this iteration
+        totalLoads[runs][iterations] = totalLoad;
+        utilityAverages[runs][iterations] = averageUtility;
+        utilityStandardDeviations[runs][iterations] = utilitySD;
+        numFreeRiders[runs][iterations] = freeRiders; 
+      }
+    }
 
-	public static double average(double[][] array, int iteration) {
-		double total = 0;
-		for (int i = 0; i < numRuns; i++)
-			total += array[i][iteration];
-		return total / numRuns;
-	}
+    // Print out average and standard deviations of results
+    for (int i = 0; i < NUM_ITERATIONS; i++) {
+      System.out.printf("%d %5.3f %6.4f %7.5f %6.4f %5.3f %6.4f\n",
+        i + 1,
+        average(totalLoads, i), standardDeviation(totalLoads, i),
+        average(utilityAverages, i), standardDeviation(utilityAverages, i), 
+        average(utilityStandardDeviations, i), standardDeviation(utilityStandardDeviations, i));
+    }
+  }
 
-	public static double SD(double[][] array, int iteration) {
-		double average = average(array, iteration);
-		double deviations = 0;
-		for (int run = 0; run < numRuns; run++)
-			deviations += Math.pow(array[run][iteration] - average, 2);
-		return Math.sqrt(deviations / (populationSize - 1));
-	}
+  private static double average(double[][] array, int iteration) {
+    double total = 0;
+    for (int i = 0; i < NUM_RUNS; i++) {
+      total += array[i][iteration];
+    }
+    return total / NUM_RUNS;
+  }
 
-	public static int numFreeRiders() {
-		if (totalLoad <= maxLoad)
-			return 0;
-		int numFR = 0;
-		for (int i = 0; i < populationSize; i++) {
-			double averageOthers = (totalLoad - agents[i].getLoad()) / (populationSize - 1); 
-			if (agents[i].getLoad() >= 1.15 * averageOthers)
-				numFR++;
-		}
-		return numFR;
-	}
+  private static double standardDeviation(double[][] array, int iteration) {
+    double average = average(array, iteration);
+    double deviations = 0;
+    for (int run = 0; run < NUM_RUNS; run++) {
+      deviations += Math.pow(array[run][iteration] - average, 2);
+    }
+    return Math.sqrt(deviations / (POPULATION_SIZE - 1));
+  }
 }
